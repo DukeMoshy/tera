@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>موقع تحليل العقارات</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+        }
+        #map {
+            height: calc(100% - 60px);
+            width: 75%;
+            float: left;
+        }
+        #sidebar {
+            height: calc(100% - 60px);
+            width: 25%;
+            float: right;
+            background-color: #ffffff;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        #topbar {
+            height: 60px;
+            width: 100%;
+            background-color: #2c3e50;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .topbar-button {
+            background-color: #34495e;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            margin-right: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .topbar-button:hover {
+            background-color: #4a6278;
+        }
+        #property-details, #analysis-tools {
+            padding: 20px;
+        }
+        .tool-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .tool-button:hover {
+            background-color: #2980b9;
+        }
+        #add-property-form {
+            display: none;
+            margin-top: 20px;
+        }
+        #add-property-form input {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #coordinates-display {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 1000;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #language-toggle {
+            position: absolute;
+            top: 70px;
+            right: 10px;
+            z-index: 1000;
+        }
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar">
+        <button class="topbar-button" onclick="toggleLayer('streets')" data-translate="streets">الشوارع الرئيسية</button>
+        <button class="topbar-button" onclick="toggleLayer('markets')" data-translate="markets">أماكن التسوق</button>
+        <button class="topbar-button" onclick="toggleLayer('hospitals')" data-translate="hospitals">المستشفيات</button>
+        <button class="topbar-button" onclick="toggleLayer('clubs')" data-translate="clubs">النوادي</button>
+    </div>
+    <div id="map"></div>
+    <div id="coordinates-display"></div>
+    <div id="language-toggle">
+        <button class="topbar-button" onclick="toggleLanguage()">English</button>
+    </div>
+    <div id="sidebar">
+        <div id="property-details">
+            <h2 data-translate="propertyDetails">تفاصيل العقار</h2>
+            <p id="selected-property" data-translate="noPropertySelected">لم يتم اختيار أي عقار</p>
+        </div>
+        <div id="analysis-tools">
+            <h2 data-translate="analysisTools">أدوات التحليل</h2>
+            <button class="tool-button" onclick="showPriceHeatmap()" data-translate="showPriceHeatmap">عرض خريطة حرارية للأسعار</button>
+            <button class="tool-button" onclick="showDemandAnalysis()" data-translate="showDemandAnalysis">تحليل الطلب</button>
+            <button class="tool-button" onclick="showInvestmentPotential()" data-translate="showInvestmentPotential">إمكانات الاستثمار</button>
+            <button class="tool-button" onclick="toggleAddPropertyForm()" data-translate="addNewProperty">إضافة عقار جديد</button>
+        </div>
+        <div id="add-property-form">
+            <h3 data-translate="addNewPropertyTitle">إضافة عقار جديد</h3>
+            <input type="text" id="property-title" data-translate="propertyTitle" placeholder="عنوان العقار">
+            <input type="number" id="property-price" data-translate="propertyPrice" placeholder="السعر">
+            <input type="text" id="property-location" data-translate="propertyLocation" placeholder="الموقع (خط العرض، خط الطول)">
+            <button class="tool-button" onclick="addNewProperty()" data-translate="addProperty">إضافة العقار</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script>
+        // تهيئة الخريطة
+        var map = L.map('map').setView([24.7136, 46.6753], 13); // إحداثيات الرياض كمثال
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // إضافة أدوات الرسم
+        var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        var drawControl = new L.Control.Draw({
+            edit: {
+                featureGroup: drawnItems
+            },
+            draw: {
+                polygon: true,
+                polyline: true,
+                rectangle: true,
+                circle: true,
+                marker: true
+            }
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, function (event) {
+            var layer = event.layer;
+            drawnItems.addLayer(layer);
+        });
+
+        // إضافة عرض الإحداثيات
+        var coordinatesDisplay = document.getElementById('coordinates-display');
+        map.on('mousemove', function(e) {
+            updateCoordinatesDisplay(e.latlng);
+        });
+
+        // الطبقات
+        var layers = {
+            streets: L.layerGroup(),
+            markets: L.layerGroup(),
+            hospitals: L.layerGroup(),
+            clubs: L.layerGroup()
+        };
+
+        function toggleLayer(layerName) {
+            if (map.hasLayer(layers[layerName])) {
+                map.removeLayer(layers[layerName]);
+            } else {
+                map.addLayer(layers[layerName]);
+                // هنا يمكنك إضافة البيانات الفعلية للطبقة
+                // مثال:
+                // layers[layerName].addLayer(L.marker([24.7136, 46.6753]).bindPopup('مثال على ' + layerName));
+            }
+        }
+
+        // ترجمات
+        const translations = {
+            ar: {
+                propertyDetails: "تفاصيل العقار",
+                noPropertySelected: "لم يتم اختيار أي عقار",
+                analysisTools: "أدوات التحليل",
+                showPriceHeatmap: "عرض خريطة حرارية للأسعار",
+                showDemandAnalysis: "تحليل الطلب",
+                showInvestmentPotential: "إمكانات الاستثمار",
+                addNewProperty: "إضافة عقار جديد",
+                addNewPropertyTitle: "إضافة عقار جديد",
+                propertyTitle: "عنوان العقار",
+                propertyPrice: "السعر",
+                propertyLocation: "الموقع (خط العرض، خط الطول)",
+                addProperty: "إضافة العقار",
+                coordinates: "الإحداثيات: ",
+                languageToggle: "English",
+                streets: "الشوارع الرئيسية",
+                markets: "أماكن التسوق",
+                hospitals: "المستشفيات",
+                clubs: "النوادي"
+            },
+            en: {
+                propertyDetails: "Property Details",
+                noPropertySelected: "No property selected",
+                analysisTools: "Analysis Tools",
+                showPriceHeatmap: "Show Price Heatmap",
+                showDemandAnalysis: "Demand Analysis",
+                showInvestmentPotential: "Investment Potential",
+                addNewProperty: "Add New Property",
+                addNewPropertyTitle: "Add New Property",
+                propertyTitle: "Property Title",
+                propertyPrice: "Price",
+                propertyLocation: "Location (Latitude, Longitude)",
+                addProperty: "Add Property",
+                coordinates: "Coordinates: ",
+                languageToggle: "العربية",
+                streets: "Main Streets",
+                markets: "Shopping Areas",
+                hospitals: "Hospitals",
+                clubs: "Clubs"
+            }
+        };
+
+        let currentLanguage = 'ar';
+
+        function toggleLanguage() {
+            currentLanguage = currentLanguage === 'ar' ? 'en' : 'ar';
+            document.documentElement.lang = currentLanguage;
+            document.documentElement.dir = currentLanguage === 'ar' ? 'rtl' : 'ltr';
+            updateTranslations();
+            updateCoordinatesDisplay(map.getCenter());
+        }
+
+        function updateTranslations() {
+            document.querySelectorAll('[data-translate]').forEach(element => {
+                const key = element.getAttribute('data-translate');
+                if (element.placeholder) {
+                    element.placeholder = translations[currentLanguage][key];
+                } else {
+                    element.textContent = translations[currentLanguage][key];
+                }
+            });
+            document.querySelector('#language-toggle button').textContent = translations[currentLanguage].languageToggle;
+        }
+
+        function updateCoordinatesDisplay(latlng) {
+            coordinatesDisplay.textContent = translations[currentLanguage].coordinates + 
+                latlng.lat.toFixed(4) + ', ' + latlng.lng.toFixed(4);
+        }
+
+        // وظائف أدوات التحليل (يجب تنفيذها)
+        function showPriceHeatmap() {
+            alert(translations[currentLanguage].showPriceHeatmap);
+        }
+
+        function showDemandAnalysis() {
+            alert(translations[currentLanguage].showDemandAnalysis);
+        }
+
+        function showInvestmentPotential() {
+            alert(translations[currentLanguage].showInvestmentPotential);
+        }
+
+        function toggleAddPropertyForm() {
+            var form = document.getElementById("add-property-form");
+            form.style.display = form.style.display === "none" ? "block" : "none";
+        }
+
+        function addNewProperty() {
+            var title = document.getElementById("property-title").value;
+            var price = document.getElementById("property-price").value;
+            var location = document.getElementById("property-location").value.split(',');
+            
+            if(title && price && location.length == 2) {
+                L.marker(location).addTo(map)
+                    .bindPopup(title + "<br>" + translations[currentLanguage].propertyPrice + ": " + price)
+                    .openPopup();
+                alert(translations[currentLanguage].addNewProperty + " " + translations[currentLanguage].addProperty);
+            } else {
+                alert("الرجاء إدخال جميع البيانات المطلوبة");
+            }
+        }
+
+        // تحديث الترجمات عند تحميل الصفحة
+        updateTranslations();
+    </script>
+</body>
+</html>
